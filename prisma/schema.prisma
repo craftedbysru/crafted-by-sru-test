@@ -1,0 +1,178 @@
+// Refreshed: 2026-04-18
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  firstName     String?
+  lastName      String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // For credentials auth
+  role          String    @default("customer") // customer, merchant, admin
+  phone         String?
+  dateOfBirth   DateTime?
+  gender        String?
+  isImmutable   Boolean   @default(false)      // Prevents deletion/edit for master merchant
+  merchantPin   String?   // Extra layer of auth for merchant (hashed)
+  cart          Json?     // Persistent cart data
+  resetToken         String?
+  resetTokenExpires  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  addresses     Address[]
+  orders        Order[]
+}
+
+model Account {
+  id                 String  @id @default(uuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Address {
+  id        String  @id @default(uuid())
+  street    String
+  street2   String?
+  city      String
+  state     String?
+  zipCode   String
+  country   String
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  imageUrl  String?
+  products  Product[]
+  createdAt DateTime  @default(now())
+}
+
+model WebsiteContent {
+  id           String   @id @default(uuid())
+  page         String   // e.g., "home", "catalog"
+  section      String   // e.g., "hero", "soul-of-sru"
+  content      Json     // Flexible JSON for text, images, etc.
+  displayOrder Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([page, section])
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  price       Float
+  originalPrice Float?
+  description String?
+  sku         String?
+  category    String?  // Legacy or display name
+  categoryId  String?
+  categoryRel Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  imageUrl    String?  @map("image_url") @db.Text
+  images      Json?    // Array of strings: ["url1", "url2", ...]
+  videoUrl    String?  @map("video_url") @db.Text
+  stock       Int      @default(0)
+  featured    Boolean  @default(false)
+  isBestSeller Boolean @default(false)
+  productData String?  @db.Text
+  salesCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  type      String   @unique // signup, order-confirmation, password-reset
+  subject   String
+  body      String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model Order {
+  id              String   @id @default(uuid())
+  customer        User     @relation(fields: [customerId], references: [id])
+  customerId      String
+  items           Json     // Storing items as JSON for simplicity
+  total           Float
+  currency        String   @default("INR")
+  status          String   @default("pending") // pending, processing, shipped, delivered, cancelled
+  paymentStatus   String   @default("unpaid") // unpaid, paid, failed, refunded
+  shippingAddress Json
+  phone           String?
+  packagingDetails String?
+  deliveryType    String?
+  transactions    Transaction[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Transaction {
+  id               String   @id @default(uuid())
+  order            Order    @relation(fields: [orderId], references: [id])
+  orderId          String
+  amount           Float
+  currency         String   @default("INR")
+  status           String   // success, failed, pending, refunded
+  provider         String   // e.g., "razorpay"
+  providerPaymentId String?  @unique
+  providerOrderId   String?
+  errorDetails     String?
+  metadata         Json?    // For IP, device info, browser info
+  createdAt        DateTime @default(now())
+}
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String   @db.Text
+  status    String   @default("unread") // unread, read, replied
+  createdAt DateTime @default(now())
+}
