@@ -3,6 +3,7 @@ export const ASSETS = {
   heroSecondary: "/images/marwar.jpeg",
   artisan: "/images/artisan.jpeg",
   marwar: "/images/marwar.jpeg",
+  sru: "/images/sru.jpeg",
   textileStack: "/images/textile-stack.jpeg",
   fragrance: "/images/fragrance.jpeg",
   monogram: "/images/monogram.jpeg",
