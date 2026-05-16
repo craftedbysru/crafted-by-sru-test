@@ -233,20 +233,20 @@ export default function ProductDetail() {
                   <p className="text-4xl font-light text-amber-950">
                     ₹{product.price.toLocaleString()}
                   </p>
-                  {(product.offerRel?.discount || product.originalPrice > product.price) && (
+                  {(product.discount || product.offerRel?.discount || (product.originalPrice && product.originalPrice > product.price)) && (
                     <p className="text-lg text-amber-900/40 line-through mt-2">
-                       ₹{(product.originalPrice || Math.round(product.price * 1.25)).toLocaleString()}
+                       ₹{(product.originalPrice || Math.round(product.price / (1 - ((product.discount || product.offerRel?.discount || 20) / 100)))).toLocaleString()}
                     </p>
                   )}
                 </div>
-                {product.offerRel && (
+                {(product.discount || product.offerRel) && (
                   <div className="flex items-center gap-2">
                      <span className="px-2 py-0.5 bg-amber-950 text-white text-[8px] font-bold uppercase tracking-widest">
-                       {product.offerRel.name}
+                       {product.discount ? "Special Price" : product.offerRel?.name}
                      </span>
-                     {product.offerRel.discount && (
+                     {(product.discount > 0 || product.offerRel?.discount > 0) && (
                        <span className="text-[10px] text-amber-700 font-bold uppercase tracking-widest">
-                         {product.offerRel.discount}% OFF
+                         {Math.max(product.discount || 0, product.offerRel?.discount || 0)}% OFF
                        </span>
                      )}
                   </div>

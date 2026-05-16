@@ -31,14 +31,13 @@ export const Footer = () => {
             <li><Link href="/shipping" className="hover:text-white transition-colors">Shipping & Delivery</Link></li>
             <li><Link href="/returns" className="hover:text-white transition-colors">Returns & Exchanges</Link></li>
             <li><Link href="/contact" className="hover:text-white transition-colors">Reach Out</Link></li>
-            <li><Link href="https://www.instagram.com/craftedbysru.in?igsh=MTNwNGJ3OXJ3ZGY3bQ==" className="hover:text-white transition-colors">Instagram</Link></li>
-            <li><a href="https://wa.me/919342646579" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors font-medium text-amber-100">+91 9342646579</a></li>
           </ul>
         </div>
         <div>
           <h4 className="text-[10px] uppercase tracking-[0.4em] mb-8 text-amber-200 font-bold">Social</h4>
           <ul className="space-y-4 text-sm opacity-60 text-amber-50/80">
-            <li><Link href="#" className="hover:text-white transition-colors">Instagram</Link></li>
+            <li><Link href="https://www.instagram.com/craftedbysru.in?igsh=MTNwNGJ3OXJ3ZGY3bQ==" className="hover:text-white transition-colors">Instagram</Link></li>
+            <li><a href="https://wa.me/919342646579" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Whatsapp</a></li>
           </ul>
         </div>
       </div>

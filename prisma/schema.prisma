@@ -75,8 +75,11 @@ model VerificationToken {
 
 model Address {
   id        String  @id @default(uuid())
+  name      String?
+  phone     String?
   street    String
   street2   String?
+  street3   String?
   city      String
   state     String?
   zipCode   String
@@ -119,6 +122,7 @@ model Product {
   name        String
   price       Float
   originalPrice Float?
+  discount    Float?   // Specific discount for this product
   description String?
   sku         String?
   category    String?  // Legacy or display name
@@ -135,6 +139,12 @@ model Product {
   offerId     String?
   offerRel    Offer?   @relation(fields: [offerId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
+
+  @@index([categoryId])
+  @@index([offerId])
+  @@index([featured])
+  @@index([isBestSeller])
+  @@index([createdAt(sort: Desc)])
 }
 
 model EmailTemplate {
@@ -161,6 +171,10 @@ model Order {
   transactions    Transaction[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
 }
 
 model Transaction {

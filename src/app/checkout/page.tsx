@@ -24,6 +24,7 @@ export default function CheckoutPage() {
     email: "",
     street: "",
     street2: "",
+    street3: "",
     city: "",
     state: "",
     postalCode: "",
@@ -90,13 +91,17 @@ export default function CheckoutPage() {
   const [deliveryType, setDeliveryType] = useState("Express Heritage Delivery");
 
   // Fetch shipping config from CMS
-  const { content: shippingConfig, loading: loadingCMS } = useCMS("config");
-  const shippingRules = shippingConfig.find(c => c.section === "shipping")?.content || {
+  const { content: cmsConfig, loading: loadingCMS } = useCMS("config");
+  const shippingLogic = cmsConfig.find(c => c.section === "shipping-logic")?.content || {
     baseCharge: 500,
     freeAbove: 25000,
-    perItemSurcharge: 50
+    perItemSurcharge: 50,
+    globalDisplayText: "",
+    rules: []
   };
-  const categoryModifiers = shippingConfig.find(c => c.section === "shipping-categories")?.content?.categories || [];
+  
+  const shippingRules = shippingLogic.rules || [];
+  const categoryModifiers = cmsConfig.find(c => c.section === "shipping-categories")?.content?.categories || [];
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -126,6 +131,7 @@ export default function CheckoutPage() {
               email: profile.email || session?.user?.email || "",
               street: addr.street || "",
               street2: addr.street2 || "",
+              street3: addr.street3 || "",
               city: addr.city || "",
               state: addr.state || "",
               postalCode: addr.zipCode || "",
@@ -150,26 +156,40 @@ export default function CheckoutPage() {
   }, [status, router]);
 
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
   
   const calculateShipping = () => {
-    // User requested to have only one amount field for shipping.
-    // Using shippingCharge as a flat rate.
-    return Number(shippingRules.shippingCharge) || 500;
+    // 1. Check conditional rules
+    const applicableRule = [...shippingRules]
+      .sort((a, b) => (b.minPrice || 0) - (a.minPrice || 0) || (b.minItems || 0) - (a.minItems || 0))
+      .find(rule => subtotal >= (rule.minPrice || 0) && totalItems >= (rule.minItems || 0));
+
+    if (applicableRule) {
+      return { cost: Number(applicableRule.cost) || 0, text: applicableRule.displayText };
+    }
+
+    // 2. Fallback to global config
+    if (subtotal >= (shippingLogic.freeAbove || 25000)) return { cost: 0, text: shippingLogic.globalDisplayText || "" };
+    
+    const base = Number(shippingLogic.baseCharge) || 500;
+    const surcharge = (totalItems - 1) * (Number(shippingLogic.perItemSurcharge) || 0);
+    return { cost: base + surcharge, text: shippingLogic.globalDisplayText || "" };
   };
 
-  const shipping = calculateShipping();
-  const total = subtotal + shipping;
+  const shippingInfo = calculateShipping();
+  const shippingCost = shippingInfo.cost;
+  const total = subtotal + (shippingInfo.text ? 0 : shippingCost);
 
   if (loading || status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FDF8F3]">
+      <div className="min-h-screen flex items-center justify-center bg-bg-primary">
         <div className="text-[10px] uppercase tracking-[0.5em] animate-pulse text-amber-900">Preparing Checkout...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FDF8F3] pt-32 pb-20 px-6">
+    <div className="min-h-screen bg-bg-primary pt-32 pb-20 px-6">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
           
@@ -180,7 +200,7 @@ export default function CheckoutPage() {
                 <ArrowLeft size={14} /> Back to Cart
               </Link>
               <h1 className="font-serif text-5xl md:text-7xl text-amber-950 mb-4">Finishing Your Selection</h1>
-              <p className="text-amber-900/60 max-w-md">Each piece is handcrafted and packed with care. Please provide your details to ensure a seamless arrival of your heritage treasures.</p>
+              <p className="text-amber-900/60 max-w-md">Each gift is carefully curated and packed with tradition. Please provide your details to ensure a seamless arrival of your heritage treasures.</p>
             </header>
 
             {/* Stepper */}
@@ -249,78 +269,80 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                <div className="space-y-6 pt-6 border-t border-amber-950/5">
-                  <h3 className="font-serif text-2xl text-amber-950">Shipping Destination</h3>
+                <div className="space-y-10 pt-8 border-t border-amber-950/5">
+                  <h3 className="font-serif text-3xl text-amber-950">Shipping Destination</h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Postal Code</label>
+                  <div className="grid grid-cols-1 gap-10">
+                    <div className="space-y-3">
+                       <label className="text-[11px] uppercase tracking-widest font-bold text-amber-900/40">Apartment, suite, house number, etc.</label>
+                       <input 
+                         type="text" 
+                         placeholder="e.g. Apt 4B, Heritage Heights"
+                         value={address.street2}
+                         onChange={(e) => setAddress({...address, street2: e.target.value})}
+                         className="w-full bg-transparent border-b border-amber-950/20 py-4 text-lg focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
+                       />
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[11px] uppercase tracking-widest font-bold text-amber-900/40">Street name / Area</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. M.G. Road, Civil Lines"
+                        value={address.street}
+                        onChange={(e) => setAddress({...address, street: e.target.value})}
+                        className="w-full bg-transparent border-b border-amber-950/20 py-4 text-lg focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
+                      />
+                    </div>
+                    
+                    <div className="space-y-3">
+                        <label className="text-[11px] uppercase tracking-widest font-bold text-amber-900/40">Landmark / Extra Directions (Optional)</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Opposite Central Park"
+                          value={(address as any).street3 || ""}
+                          onChange={(e) => setAddress({...address, street3: e.target.value} as any)}
+                          className="w-full bg-transparent border-b border-amber-950/20 py-4 text-lg focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
+                        />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                    <div className="space-y-3">
+                      <label className="text-[11px] uppercase tracking-widest font-bold text-amber-900/40">Postal Code</label>
                       <div className="relative">
                         <input 
                           type="text" 
                           placeholder="302001"
                           value={address.postalCode}
                           onChange={(e) => handlePincodeChange(e.target.value)}
-                          className="w-full bg-transparent border-b border-amber-950/20 py-3 focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
+                          className="w-full bg-transparent border-b border-amber-950/20 py-4 text-lg focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
                         />
                         {isPincodeLoading && (
-                          <div className="absolute right-0 bottom-3 text-[8px] uppercase tracking-widest text-amber-900/40 animate-pulse">
-                            Fetching...
+                          <div className="absolute right-0 bottom-4 text-[9px] uppercase tracking-widest text-amber-900/40 animate-pulse">
+                            Searching...
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Street Address</label>
-                      <input 
-                        type="text" 
-                        placeholder="Street name and house number"
-                        value={address.street}
-                        onChange={(e) => setAddress({...address, street: e.target.value})}
-                        className="w-full bg-transparent border-b border-amber-950/20 py-3 focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Apartment, suite, etc. (Optional)</label>
-                    <input 
-                      type="text" 
-                      placeholder="Apartment number, floor, etc."
-                      value={address.street2}
-                      onChange={(e) => setAddress({...address, street2: e.target.value})}
-                      className="w-full bg-transparent border-b border-amber-950/20 py-3 focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">City</label>
+                    <div className="space-y-3">
+                      <label className="text-[11px] uppercase tracking-widest font-bold text-amber-900/40">City</label>
                       <input 
                         type="text" 
                         placeholder="Jaipur"
                         value={address.city}
                         onChange={(e) => setAddress({...address, city: e.target.value})}
-                        className="w-full bg-transparent border-b border-amber-950/20 py-3 focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
+                        className="w-full bg-transparent border-b border-amber-950/20 py-4 text-lg focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">State</label>
+                    <div className="space-y-3">
+                      <label className="text-[11px] uppercase tracking-widest font-bold text-amber-900/40">State</label>
                       <input 
                         type="text" 
                         placeholder="Rajasthan"
                         value={address.state}
                         onChange={(e) => setAddress({...address, state: e.target.value})}
-                        className="w-full bg-transparent border-b border-amber-950/20 py-3 focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Country</label>
-                      <input 
-                        type="text" 
-                        value={address.country}
-                        readOnly
-                        className="w-full bg-transparent border-b border-amber-950/10 py-3 text-amber-900/40 cursor-not-allowed outline-none"
+                        className="w-full bg-transparent border-b border-amber-950/20 py-4 text-lg focus:outline-none focus:border-amber-950 transition-colors text-amber-950"
                       />
                     </div>
                   </div>
@@ -351,7 +373,7 @@ export default function CheckoutPage() {
                   <h3 className="font-serif text-2xl text-amber-950">Delivery Method</h3>
                   <div className="space-y-4">
                     <div 
-                      className="w-full p-8 border-2 border-amber-950 bg-white flex justify-between items-center"
+                      className="w-full p-8 border-2 border-amber-950 bg-bg-card flex justify-between items-center"
                     >
                       <div className="flex gap-6 items-center">
                         <div className="w-6 h-6 flex items-center justify-center text-amber-950">
@@ -362,7 +384,9 @@ export default function CheckoutPage() {
                           <p className="text-[10px] text-amber-900/40">Estimated delivery: 10-15 business days</p>
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-amber-950">₹{shipping.toLocaleString()}</span>
+                      <span className="text-sm font-medium text-amber-950">
+                        {shippingInfo.text || `₹${shippingCost.toLocaleString()}`}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -388,14 +412,9 @@ export default function CheckoutPage() {
                 animate={{ opacity: 1, scale: 1 }}
                 className="space-y-10"
               >
-                <div className="bg-white border border-amber-950/10 p-10 space-y-8">
+                <div className="bg-bg-card border border-border-subtle p-10 space-y-8">
                   <div className="flex justify-between items-center">
                     <h3 className="font-serif text-2xl text-amber-950">Payment Details</h3>
-                    <div className="flex gap-2">
-                      <div className="w-10 h-6 bg-amber-50 rounded" />
-                      <div className="w-10 h-6 bg-amber-50 rounded" />
-                      <div className="w-10 h-6 bg-amber-50 rounded" />
-                    </div>
                   </div>
                   
                   <p className="text-sm text-amber-900/60 leading-relaxed">
@@ -467,7 +486,7 @@ export default function CheckoutPage() {
 
           {/* Right Column: Summary */}
           <div className="lg:col-span-5">
-            <div className="bg-white p-10 border border-amber-950/5 sticky top-32 space-y-10">
+            <div className="bg-bg-card p-10 border border-border-subtle sticky top-32 space-y-10">
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h2 className="font-serif text-3xl text-amber-950">Your Selection</h2>
@@ -503,7 +522,7 @@ export default function CheckoutPage() {
                       <div className="flex justify-between items-end">
                         <p className="text-[10px] text-amber-900/60 uppercase tracking-widest">QTY: {item.quantity.toString().padStart(2, '0')}</p>
                         <p className="text-sm font-medium text-amber-950">
-                          {currencies.find(c => c.code === currency)?.symbol} {(item.price * exchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {currencies.find(c => c.code === currency)?.symbol} {(item.price * item.quantity * exchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                       </div>
                     </div>
@@ -521,7 +540,9 @@ export default function CheckoutPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-amber-900/60">Shipping & Handling</span>
                   <span className="text-amber-950">
-                    {currencies.find(c => c.code === currency)?.symbol} {(shipping * exchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {shippingInfo.text || (
+                      `${currencies.find(c => c.code === currency)?.symbol} ${(shippingCost * exchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    )}
                   </span>
                 </div>
                 <div className="h-px bg-amber-950/10 w-full my-2" />

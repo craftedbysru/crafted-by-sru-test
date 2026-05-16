@@ -21,6 +21,8 @@ export default function MerchantDashboard() {
   const { data: session, status } = useSession();
   const [activeSection, setActiveSection] = useState<Section>("dashboard");
   const [products, setProducts] = useState<any[]>([]);
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [activeTheme, setActiveTheme] = useState("original");
   const [offers, setOffers] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -89,6 +91,7 @@ export default function MerchantDashboard() {
     productData: "",
     price: "",
     originalPrice: "",
+    discount: "",
     sku: "",
     category: "",
     categoryId: "",
@@ -318,13 +321,13 @@ export default function MerchantDashboard() {
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
       setOffers(Array.isArray(offersData) ? offersData : []);
       
-      if ((role === "admin" || role === "merchant") && responses[3]) {
-        const cmsData = await responses[3].json();
+      if ((role === "admin" || role === "merchant") && responses[4]) {
+        const cmsData = await responses[4].json();
         setCmsContent(Array.isArray(cmsData) ? cmsData : []);
       }
 
-      if ((role === "admin" || role === "merchant") && responses[4]) {
-        const msgData = await responses[4].json();
+      if ((role === "admin" || role === "merchant") && responses[5]) {
+        const msgData = await responses[5].json();
         setMessages(Array.isArray(msgData) ? msgData : []);
       }
     } catch (error) {
@@ -343,6 +346,7 @@ export default function MerchantDashboard() {
         productData: product.productData || "",
         price: product.price.toString(),
         originalPrice: product.originalPrice?.toString() || "",
+        discount: product.discount?.toString() || "",
         sku: product.sku || "",
         category: product.category || "",
         categoryId: product.categoryId || "",
@@ -364,6 +368,7 @@ export default function MerchantDashboard() {
         productData: "",
         price: "",
         originalPrice: "",
+        discount: "",
         sku: "",
         category: "",
         categoryId: "",
@@ -416,6 +421,7 @@ export default function MerchantDashboard() {
         videoUrl: finalVideoUrl,
         price: parseFloat(formData.price),
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : null,
+        discount: formData.discount ? parseFloat(formData.discount) : null,
         stock: parseInt(formData.stock)
       };
 
@@ -566,7 +572,7 @@ export default function MerchantDashboard() {
   };
 
   const stats = {
-    totalSales: Array.isArray(orders) ? orders.reduce((acc, order) => acc + (order.status === "DELIVERED" ? order.total : 0), 0) : 0,
+    totalSales: Array.isArray(orders) ? orders.reduce((acc, order) => acc + (order.paymentStatus === "paid" ? order.total : 0), 0) : 0,
     totalOrders: Array.isArray(orders) ? orders.length : 0,
     pendingOrders: Array.isArray(orders) ? orders.filter(order => order.status === "PENDING" || order.status === "PROCESSING").length : 0,
     activeProducts: Array.isArray(products) ? products.length : 0
@@ -667,7 +673,14 @@ export default function MerchantDashboard() {
             onClick={() => { setActiveSection("dashboard"); setIsSidebarOpen(false); }} 
           />
           <SidebarLink 
-            icon={<ShoppingBag size={18} />} 
+            icon={
+              <div className="relative">
+                <ShoppingBag size={18} />
+                {orders.some(o => o.status?.toUpperCase() === "PENDING") && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border border-white shadow-sm" />
+                )}
+              </div>
+            }
             label="Orders" 
             active={activeSection === "orders"} 
             onClick={() => { setActiveSection("orders"); setIsSidebarOpen(false); }} 
@@ -686,7 +699,7 @@ export default function MerchantDashboard() {
           />
           <SidebarLink 
             icon={<TrendingUp size={18} />} 
-            label="Offers & Discounts" 
+            label="Offers & Promotions" 
             active={activeSection === "offers"} 
             onClick={() => { setActiveSection("offers"); setIsSidebarOpen(false); }} 
           />
@@ -720,7 +733,10 @@ export default function MerchantDashboard() {
           )}
         </nav>
 
-        <div className="p-6 border-t border-amber-900/5">
+        <div className="p-6 border-t border-amber-900/5 space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <span className="text-[8px] uppercase tracking-widest font-bold text-amber-900/40">Heritage Mode</span>
+          </div>
           <button 
             onClick={() => signOut({ callbackUrl: "/" })}
             className="flex items-center gap-3 text-amber-900/40 hover:text-red-600 transition-colors text-[10px] uppercase tracking-widest font-bold w-full"
@@ -846,8 +862,10 @@ export default function MerchantDashboard() {
                       <tr key={order.id} className="hover:bg-amber-50 transition-colors">
                         <td className="p-6 text-xs font-medium text-amber-950">#{order.id.slice(-8).toUpperCase()}</td>
                         <td className="p-6">
-                           <p className="text-xs font-medium text-amber-950">{order.customer?.name || "Guest"}</p>
-                           <p className="text-[10px] text-amber-900/40">{order.customer?.email}</p>
+                           <p className="text-xs font-medium text-amber-950">
+                             {order.shippingAddress?.firstName ? `${order.shippingAddress.firstName} ${order.shippingAddress.lastName || ""}`.trim() : (order.customer?.name || order.shippingAddress?.name || "Customer")}
+                           </p>
+                           <p className="text-[10px] text-amber-900/40">{order.customer?.email || order.shippingAddress?.email}</p>
                         </td>
                         <td className="p-6 text-xs text-amber-900/60">
                           {order.phone || (order.shippingAddress as any)?.phone || "N/A"}
@@ -862,24 +880,27 @@ export default function MerchantDashboard() {
                         <td className="p-6">
                           <span className={`px-3 py-1 text-[8px] uppercase tracking-widest font-bold rounded-full ${
                             order.status === 'DELIVERED' ? 'bg-green-50 text-green-600' : 
-                            order.status === 'CANCELLED' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+                            order.paymentStatus === 'failed' || order.status === 'FAILED' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
                           }`}>
-                            {order.status}
+                            {order.paymentStatus === 'failed' ? 'FAILED' : (order.status === "PENDING" ? "Received" : order.status)}
                           </span>
                         </td>
                         <td className="p-6">
                           <div className="flex items-center gap-4">
-                            <select 
-                              value={order.status}
-                              onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                              className="bg-transparent border border-amber-900/10 p-2 text-[10px] uppercase tracking-widest font-bold text-amber-950 focus:outline-none"
-                            >
-                              <option value="PENDING">Pending</option>
-                              <option value="PROCESSING">Processing</option>
-                              <option value="SHIPPED">Shipped</option>
-                              <option value="DELIVERED">Delivered</option>
-                              <option value="CANCELLED">Cancelled</option>
-                            </select>
+                            {order.paymentStatus !== "failed" && order.status !== "FAILED" ? (
+                              <select 
+                                value={order.status.toUpperCase()}
+                                onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                                className="bg-transparent border border-amber-900/10 p-2 text-[10px] uppercase tracking-widest font-bold text-amber-950 focus:outline-none"
+                              >
+                                <option value="PENDING">Received</option>
+                                <option value="PROCESSING">Processing</option>
+                                <option value="SHIPPED">Shipped</option>
+                                <option value="DELIVERED">Delivered</option>
+                              </select>
+                            ) : (
+                              <span className="text-[10px] uppercase tracking-widest font-bold text-red-900/30">No Actions</span>
+                            )}
                             <button 
                               onClick={() => {
                                 setSelectedOrder(order);
@@ -907,22 +928,36 @@ export default function MerchantDashboard() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-8"
             >
-              <div className="flex justify-between items-end">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                 <div>
                   <h1 className="font-serif text-4xl text-amber-950 mb-2">Inventory</h1>
                   <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/40">Manage your heritage collection.</p>
                 </div>
-                <button 
-                  onClick={() => handleOpenModal()}
-                  className="px-8 py-4 bg-amber-950 text-white text-[10px] uppercase tracking-widest font-bold hover:bg-amber-900 transition-all flex items-center gap-3"
-                >
-                  <Plus size={16} />
-                  Add Product
-                </button>
+                <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+                  <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-900/40" size={14} />
+                    <input 
+                      type="text"
+                      placeholder="Search items or SKU..."
+                      value={inventorySearch}
+                      onChange={(e) => setInventorySearch(e.target.value)}
+                      className="w-full bg-amber-50/50 border border-amber-900/10 pl-10 pr-4 py-3 text-[10px] uppercase tracking-widest focus:outline-none focus:border-amber-900/30 transition-all"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => handleOpenModal()}
+                    className="w-full md:w-auto px-8 py-4 bg-amber-950 text-white text-[10px] uppercase tracking-widest font-bold hover:bg-amber-900 transition-all flex items-center justify-center gap-3"
+                  >
+                    <Plus size={16} />
+                    Add Product
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
-                {Array.isArray(products) && products.map((product) => (
+                {Array.isArray(products) && products
+                  .filter(p => !inventorySearch || p.name.toLowerCase().includes(inventorySearch.toLowerCase()) || p.sku?.toLowerCase().includes(inventorySearch.toLowerCase()))
+                  .map((product) => (
                   <div key={product.id} className="bg-white border border-amber-900/10 group overflow-hidden flex flex-col">
                     <div className="aspect-[4/5] bg-amber-50 relative overflow-hidden">
                       <img 
@@ -1032,8 +1067,8 @@ export default function MerchantDashboard() {
             >
               <div className="flex justify-between items-end">
                 <div>
-                  <h1 className="font-serif text-4xl text-amber-950 mb-2">Offers & Discounts</h1>
-                  <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/40">Create and manage marketing promotions.</p>
+                  <h1 className="font-serif text-4xl text-amber-950 mb-2">Offers & Promotions</h1>
+                  <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/40">Create and manage marketing promotions and product discounts.</p>
                 </div>
                 <button 
                   onClick={() => {
@@ -1044,67 +1079,145 @@ export default function MerchantDashboard() {
                   className="px-8 py-4 bg-amber-950 text-white text-[10px] uppercase tracking-widest font-bold hover:bg-amber-900 transition-all flex items-center gap-3"
                 >
                   <Plus size={16} />
-                  New Offer
+                  New Offer Name
                 </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {Array.isArray(offers) && offers.map((offer) => (
-                  <div key={offer.id} className="bg-white border border-amber-900/10 p-8 flex flex-col justify-between group hover:bg-amber-50 transition-colors">
-                    <div>
-                      <div className="flex justify-between items-start mb-4">
-                         <h3 className="font-serif text-2xl text-amber-950">{offer.name}</h3>
-                         {offer.discount && (
-                           <span className="px-2 py-1 bg-amber-950 text-white text-[8px] font-bold uppercase tracking-widest">
-                             {offer.discount}% OFF
-                           </span>
-                         )}
+                {Array.isArray(offers) && offers.map((offer) => {
+                  const linkedProducts = products.filter(p => p.offerId === offer.id);
+                  return (
+                    <div key={offer.id} className="bg-white border border-amber-900/10 p-8 flex flex-col justify-between group hover:bg-amber-50 transition-colors">
+                      <div>
+                        <div className="flex justify-between items-start mb-4">
+                           <h3 className="font-serif text-2xl text-amber-950">{offer.name}</h3>
+                        </div>
+                        <p className="text-xs text-amber-900/60 leading-relaxed mb-6">
+                          {offer.description || "No description provided."}
+                        </p>
+                        <div className="h-px bg-amber-950/10 w-full mb-6" />
+                        <div className="space-y-4">
+                           <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-amber-950">
+                                {linkedProducts.length} Products Linked
+                              </span>
+                           </div>
+                           {linkedProducts.length > 0 && (
+                             <div className="space-y-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+                               {linkedProducts.map(p => (
+                                 <div key={p.id} className="flex items-center gap-3 py-2 border-b border-amber-950/5 last:border-0">
+                                   <div className="w-8 h-8 bg-amber-50 flex-shrink-0">
+                                     <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                                   </div>
+                                   <span className="text-[10px] text-amber-900/60 truncate font-medium">{p.name}</span>
+                                 </div>
+                               ))}
+                             </div>
+                           )}
+                        </div>
                       </div>
-                      <p className="text-xs text-amber-900/60 leading-relaxed mb-6">
-                        {offer.description || "No description provided."}
-                      </p>
-                      <div className="h-px bg-amber-950/10 w-full mb-6" />
-                      <div className="flex items-center justify-between">
-                         <span className="text-[8px] uppercase tracking-[0.2em] font-bold text-amber-900/40">
-                           {products.filter(p => p.offerId === offer.id).length} Products Linked
-                         </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-4 mt-8 pt-8 border-t border-amber-950/5">
-                      <button 
-                         onClick={() => {
-                           setEditingOffer(offer);
-                           setOfferFormData({ 
-                             name: offer.name, 
-                             description: offer.description || "", 
-                             discount: offer.discount?.toString() || "" 
-                           });
-                           setIsOfferModalOpen(true);
-                         }}
-                         className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-widest text-amber-900 hover:text-amber-950"
-                      >
-                        <Edit2 size={12} /> Edit
-                      </button>
-                      <button 
-                         onClick={async () => {
-                           if (!confirm("Are you sure? This will remove the offer from all linked products.")) return;
-                           try {
-                             const res = await fetch(`/api/offers/${offer.id}`, { method: "DELETE" });
-                             if (res.ok) {
-                               toast.success("Offer deleted");
-                               fetchData();
+                      <div className="flex gap-4 mt-8 pt-8 border-t border-amber-950/5">
+                        <button 
+                           onClick={() => {
+                             setEditingOffer(offer);
+                             setOfferFormData({ 
+                               name: offer.name, 
+                               description: offer.description || "", 
+                               discount: offer.discount?.toString() || "" 
+                             });
+                             setIsOfferModalOpen(true);
+                           }}
+                           className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-widest text-amber-900 hover:text-amber-950"
+                        >
+                          <Edit2 size={12} /> Edit
+                        </button>
+                        <button 
+                           onClick={async () => {
+                             if (!confirm("Are you sure? This will remove the offer name from all linked products.")) return;
+                             try {
+                               const res = await fetch(`/api/offers/${offer.id}`, { method: "DELETE" });
+                               if (res.ok) {
+                                 toast.success("Offer deleted");
+                                 fetchData();
+                               }
+                             } catch (err) {
+                               toast.error("Failed to delete offer");
                              }
-                           } catch (err) {
-                             toast.error("Failed to delete offer");
-                           }
-                         }}
-                         className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-widest text-red-400 hover:text-red-600"
-                      >
-                        <Trash2 size={12} /> Delete
-                      </button>
+                           }}
+                           className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-widest text-red-400 hover:text-red-600"
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
+              </div>
+
+              <div className="bg-white border border-amber-900/10 overflow-hidden mt-12">
+                <div className="p-8 border-b border-amber-900/5">
+                  <h3 className="font-serif text-xl text-amber-950 uppercase tracking-tight">Direct Product Discounts</h3>
+                  <p className="text-[10px] text-amber-900/40 uppercase tracking-widest mt-1">Products with discounted pricing applied individually.</p>
+                </div>
+                <div className="divide-y divide-amber-900/5">
+                  {products.filter(p => p.originalPrice || p.discount).map(product => (
+                    <div key={product.id} className="p-6 flex items-center justify-between hover:bg-amber-50/50 transition-colors">
+                      <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 bg-amber-50 overflow-hidden rounded-sm border border-amber-900/5">
+                          <img src={product.imageUrl || getPlaceholderImage(product.category)} alt="" className="w-full h-full object-cover" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-amber-950">{product.name}</p>
+                          <p className="text-[10px] text-amber-900/40 uppercase tracking-widest">{product.categoryRel?.name || product.category || "No Category"}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-xs font-bold text-red-600">₹{product.price}</span>
+                            {product.originalPrice && <span className="text-[10px] text-amber-900/40 line-through">₹{product.originalPrice}</span>}
+                            <span className="text-[8px] px-2 py-0.5 bg-red-50 text-red-600 font-bold uppercase tracking-widest border border-red-100">
+                              {product.discount ? `${product.discount}% OFF` : product.originalPrice ? `${Math.round((1 - product.price / product.originalPrice) * 100)}% OFF` : 'ON SALE'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-4">
+                        <button 
+                          onClick={() => handleOpenModal(product)}
+                          className="px-4 py-2 border border-amber-900/10 text-[8px] uppercase tracking-widest font-bold text-amber-900 hover:bg-amber-950 hover:text-white transition-all"
+                        >
+                          Modify Discount
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            if (!confirm("End this discount?")) return;
+                            try {
+                              const res = await fetch(`/api/inventory/${product.id}`, {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ 
+                                  ...product, 
+                                  price: product.originalPrice || product.price, 
+                                  originalPrice: null,
+                                  discount: null
+                                })
+                              });
+                              if (res.ok) {
+                                toast.success("Discount removed");
+                                fetchData();
+                              }
+                            } catch (e) { toast.error("Failed to remove discount"); }
+                          }}
+                          className="px-4 py-2 border border-red-100 text-[8px] uppercase tracking-widest font-bold text-red-600 hover:bg-red-600 hover:text-white transition-all"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {products.filter(p => p.originalPrice || p.discount).length === 0 && (
+                    <div className="p-12 text-center text-[10px] uppercase tracking-widest text-amber-900/40">
+                      No products currently have active discounts. Add them in the inventory section.
+                    </div>
+                  )}
+                </div>
               </div>
             </motion.div>
           )}
@@ -1187,33 +1300,25 @@ export default function MerchantDashboard() {
             <motion.div 
               key="shipping"
               initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
+              animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, y: -10 }}
               className="space-y-12"
             >
               <div>
-                <h1 className="font-serif text-4xl text-amber-950 mb-2">Shipping Configuration</h1>
-                <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/40">Set a flat shipping rate for all heritage items.</p>
+                <h1 className="font-serif text-4xl text-amber-950 mb-2">Shipping Logic & Marketplace Rules</h1>
+                <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/40">Manage global costs and conditional shipping rules in one place.</p>
               </div>
 
               <div className="grid grid-cols-1 gap-12">
                 <CMSSectionEditor 
-                  title="Global Shipping Rate" 
+                  title="Unified Shipping Manager" 
                   page="config" 
-                  section="shipping" 
-                  initialContent={cmsContent.find(c => c.page === "config" && c.section === "shipping")?.content || { shippingCharge: 500 }}
+                  section="shipping-logic" 
+                  initialContent={cmsContent.find(c => c.page === "config" && c.section === "shipping-logic")?.content || { baseCharge: 500, freeAbove: 25000, perItemSurcharge: 50, globalDisplayText: "", rules: [] }}
                   onSave={fetchData}
                   products={products}
                   categories={categories}
                 />
-                
-                <div className="bg-amber-50/50 p-8 border border-dashed border-amber-900/10">
-                  <p className="text-[10px] uppercase tracking-widest text-amber-950/40 font-bold mb-2">Note on Shipping</p>
-                  <p className="text-xs text-amber-900/60 leading-relaxed">
-                    Category-based shipping premiums have been disabled as per recent refinements. 
-                    The 'Free Above' threshold has also been removed to maintain uniform shipping standards across all heritage treasures.
-                  </p>
-                </div>
               </div>
             </motion.div>
           )}
@@ -1267,86 +1372,6 @@ export default function MerchantDashboard() {
             </motion.div>
           )}
 
-          {activeSection === "offers" && (
-            <motion.div 
-              key="offers"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-8"
-            >
-              <div className="flex justify-between items-end">
-                <div>
-                  <h1 className="font-serif text-4xl text-amber-950 mb-2">Offers & Tactical Discounts</h1>
-                  <p className="text-[10px] uppercase tracking-[0.4em] text-amber-900/40">Manage your product sales and limited-time deals.</p>
-                </div>
-              </div>
-
-              <div className="bg-white border border-amber-900/10 overflow-hidden">
-                <div className="p-8 border-b border-amber-900/5">
-                  <h3 className="font-serif text-xl text-amber-950">Active Sales</h3>
-                </div>
-                <div className="divide-y divide-amber-900/5">
-                  {products.filter(p => p.originalPrice).map(product => (
-                    <div key={product.id} className="p-6 flex items-center justify-between hover:bg-amber-50/50 transition-colors">
-                      <div className="flex items-center gap-6">
-                        <div className="w-16 h-16 bg-amber-50 overflow-hidden rounded-sm border border-amber-900/5">
-                          <img src={product.imageUrl || getPlaceholderImage(product.category)} alt="" className="w-full h-full object-cover" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-amber-950">{product.name}</p>
-                          <p className="text-[10px] text-amber-900/40 uppercase tracking-widest">{product.categoryRel?.name || product.category || "No Category"}</p>
-                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-xs font-bold text-red-600">₹{product.price}</span>
-                            <span className="text-[10px] text-amber-900/40 line-through">₹{product.originalPrice}</span>
-                            <span className="text-[8px] px-2 py-0.5 bg-red-50 text-red-600 font-bold uppercase tracking-widest border border-red-100">
-                              {Math.round((1 - product.price / product.originalPrice) * 100)}% OFF
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-4">
-                        <button 
-                          onClick={() => handleOpenModal(product)}
-                          className="px-4 py-2 border border-amber-900/10 text-[8px] uppercase tracking-widest font-bold text-amber-900 hover:bg-amber-950 hover:text-white transition-all"
-                        >
-                          Modify Offer
-                        </button>
-                        <button 
-                          onClick={async () => {
-                            if (!confirm("End this offer? The product will return to its original price.")) return;
-                            try {
-                              const res = await fetch(`/api/inventory/${product.id}`, {
-                                method: "PUT",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ 
-                                  ...product, 
-                                  price: product.originalPrice, 
-                                  originalPrice: null 
-                                })
-                              });
-                              if (res.ok) {
-                                toast.success("Offer ended");
-                                fetchData();
-                              }
-                            } catch (e) { toast.error("Failed to end offer"); }
-                          }}
-                          className="px-4 py-2 border border-red-100 text-[8px] uppercase tracking-widest font-bold text-red-600 hover:bg-red-600 hover:text-white transition-all"
-                        >
-                          Remove offer
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {products.filter(p => p.originalPrice).length === 0 && (
-                    <div className="p-12 text-center text-[10px] uppercase tracking-widest text-amber-900/40">
-                      No products currently on sale. Use the inventory section to add discounts.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          )}
           {activeSection === "emails" && (
             <motion.div 
               key="emails"
@@ -1535,7 +1560,7 @@ export default function MerchantDashboard() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Selling Price (₹)</label>
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Listing Price (₹)</label>
                       <input 
                         required
                         type="number" 
@@ -1546,14 +1571,14 @@ export default function MerchantDashboard() {
                       />
                     </div>
                     <div className="space-y-2">
-                       <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Original Price (₹) - For Slashed Display</label>
+                       <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Applied Discount (%)</label>
                        <input 
                          type="number" 
-                         step="0.01"
-                         value={formData.originalPrice}
-                         onChange={(e) => setFormData({...formData, originalPrice: e.target.value})}
+                         step="0.1"
+                         value={formData.discount}
+                         onChange={(e) => setFormData({...formData, discount: e.target.value})}
                          className="w-full bg-transparent border-b border-amber-900/20 py-3 focus:outline-none focus:border-amber-900 transition-colors text-amber-950"
-                         placeholder="e.g. 5999"
+                         placeholder="e.g. 10 for 10% off"
                        />
                      </div>
                   </div>
@@ -1749,7 +1774,9 @@ export default function MerchantDashboard() {
                     <div className="space-y-3">
                       <div>
                         <p className="text-[8px] uppercase tracking-widest text-amber-900/40 mb-0.5">Full Name</p>
-                        <p className="text-sm font-medium text-amber-950">{selectedOrder.customer?.name || "Guest"}</p>
+                        <p className="text-sm font-medium text-amber-950">
+                          {selectedOrder.shippingAddress?.firstName ? `${selectedOrder.shippingAddress.firstName} ${selectedOrder.shippingAddress.lastName || ""}`.trim() : (selectedOrder.customer?.name || selectedOrder.shippingAddress?.name || "Customer")}
+                        </p>
                       </div>
                       <div>
                         <p className="text-[8px] uppercase tracking-widest text-amber-900/40 mb-0.5">Email Address</p>
@@ -1762,7 +1789,7 @@ export default function MerchantDashboard() {
                       <div>
                         <p className="text-[8px] uppercase tracking-widest text-amber-900/40 mb-0.5">Customer Type</p>
                         <span className="px-2 py-0.5 bg-amber-50 text-[8px] uppercase tracking-widest font-bold text-amber-900 border border-amber-900/10">
-                          {selectedOrder.customer?.role || "Guest"}
+                          {selectedOrder.customer?.role === "customer" ? "Registered Customer" : selectedOrder.customer?.role?.toUpperCase() || "GUEST"}
                         </span>
                       </div>
                       {selectedOrder.customer?.createdAt && (
@@ -1819,8 +1846,8 @@ export default function MerchantDashboard() {
                     <h3 className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Payment Details</h3>
                     <div className="space-y-1">
                       <p className="text-xs text-amber-900/60">Status: <span className="font-bold text-amber-950 uppercase">{selectedOrder.paymentStatus}</span></p>
-                      <p className="text-xs text-amber-900/60">Razorpay Order: <span className="text-amber-950">{selectedOrder.razorpayOrderId}</span></p>
-                      <p className="text-xs text-amber-900/60">Payment ID: <span className="text-amber-950">{selectedOrder.paymentId}</span></p>
+                      <p className="text-xs text-amber-900/60">Razorpay Order: <span className="text-amber-950">{selectedOrder.transactions?.[0]?.providerOrderId || "N/A"}</span></p>
+                      <p className="text-xs text-amber-900/60">Payment ID: <span className="text-amber-950">{selectedOrder.transactions?.[0]?.providerPaymentId || "N/A"}</span></p>
                     </div>
                   </div>
                   <div className="space-y-4 text-right">
@@ -1963,7 +1990,7 @@ export default function MerchantDashboard() {
                     value={offerFormData.name}
                     onChange={(e) => setOfferFormData({...offerFormData, name: e.target.value})}
                     className="w-full bg-transparent border-b border-amber-900/20 py-3 focus:outline-none focus:border-amber-900 transition-colors text-amber-950"
-                    placeholder="e.g. Summer Heritage Sale"
+                    placeholder="e.g. Summer Sale"
                   />
                 </div>
                 <div className="space-y-2">
@@ -1974,16 +2001,6 @@ export default function MerchantDashboard() {
                     className="w-full bg-transparent border-b border-amber-900/20 py-3 focus:outline-none focus:border-amber-900 transition-colors text-amber-950 resize-none"
                     rows={3}
                     placeholder="Describe the offer details..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-amber-900/40">Discount Percentage (Optional)</label>
-                  <input 
-                    type="number" 
-                    value={offerFormData.discount}
-                    onChange={(e) => setOfferFormData({...offerFormData, discount: e.target.value})}
-                    className="w-full bg-transparent border-b border-amber-900/20 py-3 focus:outline-none focus:border-amber-900 transition-colors text-amber-950"
-                    placeholder="e.g. 15"
                   />
                 </div>
                 <button 
@@ -2078,6 +2095,7 @@ export default function MerchantDashboard() {
                           <option value="image">Image URL</option>
                           <option value="product-list">Product Selection</option>
                           <option value="category-list">Category Selection</option>
+                          <option value="list">Generic List (e.g. Policies)</option>
                         </select>
                       </div>
                       <div className="col-span-3 flex justify-end">
@@ -2224,14 +2242,18 @@ function CMSSectionEditor({ title, page, section, initialContent, initialDisplay
           if (isArray) {
             const isProductList = key.toLowerCase().includes("product");
             const isCategoryList = key.toLowerCase().includes("category");
+            
+            const listLabel = (page === "privacy" || page === "terms" || page === "return-policy") && key === "sections" 
+              ? "Policy Clauses/Sections" 
+              : key;
 
             return (
               <div key={key} className="space-y-4 p-4 bg-amber-50/20 border border-amber-900/5">
                 <div className="flex justify-between items-center">
-                  <label className="text-[8px] uppercase tracking-widest font-bold text-amber-900/40">{key} ({isProductList ? "Products" : isCategoryList ? "Categories" : "List"})</label>
+                  <label className="text-[8px] uppercase tracking-widest font-bold text-amber-900/40">{listLabel} ({isProductList ? "Products" : isCategoryList ? "Categories" : "List"})</label>
                   <button 
                     onClick={() => {
-                      const newItem = isProductList ? { id: "", name: "", image: "", price: 0 } : isCategoryList ? { id: "", name: "", image: "" } : { title: "New Item", content: "" };
+                      const newItem = isProductList ? { id: "", name: "", image: "", price: 0 } : isCategoryList ? { id: "", name: "", image: "" } : { title: "", content: "" };
                       const newArray = [...(content[key] || []), newItem];
                       setContent({...content, [key]: newArray});
                     }}
@@ -2292,13 +2314,24 @@ function CMSSectionEditor({ title, page, section, initialContent, initialDisplay
                                            subKey.toLowerCase().includes("charge") || 
                                            subKey.toLowerCase().includes("multiplier") || 
                                            subKey.toLowerCase().includes("price") ||
+                                           subKey.toLowerCase().includes("cost") ||
+                                           subKey.toLowerCase().includes("min") ||
                                            subKey.toLowerCase().includes("above");
                         const isCategoryId = subKey.toLowerCase().includes("categoryid");
+
+                        const label = subKey === "minItems" ? "Min Items Required" :
+                                      subKey === "minPrice" ? "Min Price Required (₹)" :
+                                      subKey === "cost" ? "Shipping Cost (₹)" :
+                                      subKey === "displayText" ? "Display Text (Overrides Cost)" :
+                                      subKey === "title" && (page === "privacy" || page === "terms" || page === "return-policy") ? null :
+                                      subKey.charAt(0).toUpperCase() + subKey.slice(1);
+
+                        if (!label) return null;
 
                         if (isCategoryId) {
                           return (
                             <div key={subKey} className="space-y-1">
-                              <label className="text-[7px] uppercase tracking-widest font-bold text-amber-900/30">{subKey}</label>
+                              <label className="text-[7px] uppercase tracking-widest font-bold text-amber-900/30">{label}</label>
                               <select 
                                 value={item[subKey]}
                                 onChange={(e) => {
@@ -2318,7 +2351,7 @@ function CMSSectionEditor({ title, page, section, initialContent, initialDisplay
 
                         return (
                           <div key={subKey} className="space-y-1">
-                            <label className="text-[7px] uppercase tracking-widest font-bold text-amber-900/30">{subKey}</label>
+                            <label className="text-[7px] uppercase tracking-widest font-bold text-amber-900/30">{label}</label>
                             <input 
                               type={isNumberField ? "number" : "text"}
                               value={item[subKey]}
@@ -2342,11 +2375,16 @@ function CMSSectionEditor({ title, page, section, initialContent, initialDisplay
           const isNumberInput = key.toLowerCase().includes("charge") || 
                                key.toLowerCase().includes("above") || 
                                key.toLowerCase().includes("order") ||
+                               key.toLowerCase().includes("surcharge") ||
                                key.toLowerCase().includes("price");
+
+          const topLabel = (page === "privacy" || page === "terms" || page === "return-policy") 
+            ? (key === "intro" ? "Policy Introduction / Summary" : key === "title" ? "Main Heading" : key) 
+            : key;
 
           return (
             <div key={key} className="space-y-1">
-              <label className="text-[8px] uppercase tracking-widest font-bold text-amber-900/40">{key}</label>
+              <label className="text-[8px] uppercase tracking-widest font-bold text-amber-900/40">{topLabel}</label>
               {isLongText ? (
                 <textarea 
                   value={content[key]}
